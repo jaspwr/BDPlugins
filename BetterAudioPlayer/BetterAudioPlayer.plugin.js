@@ -65,7 +65,6 @@ module.exports = !global.ZeresPluginLibrary ? class {
                 this.prePlaying = false;
                 this.lastRender = 0;
 
-
                 this.draw = this.draw.bind(this);
                 this.destructor = this.destructor.bind(this);
                 this.obj['spectrumRendererDestructor'] = this.destructor;

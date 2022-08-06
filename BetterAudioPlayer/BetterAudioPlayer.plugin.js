@@ -38,19 +38,15 @@ module.exports = !global.ZeresPluginLibrary ? class {
         stop() {}
     } :
     (([Plugin, Library]) => {
-        const { DiscordModules, WebpackModules, Patcher, PluginUtilities, DOMTools} = Library;
+        const { DiscordModules, WebpackModules, Patcher, PluginUtilities } = Library;
         const { ReactDOM } = DiscordModules;
         const MediaPlayer = WebpackModules.find(m => m?.default?.displayName === "MediaPlayer");
-
         const https = require('https');
-
-
 
         const lines = 110;
         let spectraColour = "#738ADB";
         let oscilloColour = "#FFFFFF";
         const fallSpeed = 0.12;
-
 
         const spectrumRendererList =[];
         class SpectrumRenderer{
@@ -140,6 +136,7 @@ module.exports = !global.ZeresPluginLibrary ? class {
 
                     let delta_time = timestamp - lastRender;
                     lastRender = timestamp;
+
                     this.canvas.clearRect(0, 0, this.width, this.height);
 
                     if(this.obj.state.playing){
@@ -168,7 +165,6 @@ module.exports = !global.ZeresPluginLibrary ? class {
 
                     prePlaying = this.obj.state.playing;
 
-                    
                     if(Math.floor(this.time/1000) != this.obj.state.currentTime){
                         // This is unfortunatly only an int of seconds and will cause the time to be offset.
                         this.time = this.obj.state.currentTime*1000;

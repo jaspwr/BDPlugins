@@ -13,7 +13,7 @@ const config = {
         }],
         version: "0.0.1",
         description: "Enables streamer mode when you go live in a voice channel.",
-        github_raw: "https://raw.githubusercontent.com/mihabozic123/BDplugins/master/streamerModeOnGoLive/streamerModeOnGoLive.plugin.js",
+        github_raw: "https://raw.githubusercontent.com/jaspwr/BDPlugins/master/StreamerModeOnLive/StreamerModeOnLive.plugin.js",
     },
     defaultConfig: []
 };

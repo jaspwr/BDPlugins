@@ -2,7 +2,7 @@
  * @name BetterAudioPlayer
  * @author jaspwr
  * @description Adds a spectrograph and oscilliscope visualiser to audio attachment players.
- * @version 0.0.1
+ * @version 1.0.0
  * @source https://raw.githubusercontent.com/jaspwr/BDPlugins/master/BetterAudioPlayer/BetterAudioPlayer.plugin.js
  */
 
@@ -12,7 +12,7 @@
         authors: [{
             name: "jaspwr"
         }],
-        version: "0.0.1",
+        version: "1.0.0",
         description: "Adds a spectrograph and oscilliscope visualiser to audio attachment players.",
         github_raw: "https://raw.githubusercontent.com/jaspwr/BDPlugins/master/BetterAudioPlayer/BetterAudioPlayer.plugin.js",
     },

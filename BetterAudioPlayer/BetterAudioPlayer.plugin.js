@@ -51,162 +51,182 @@ module.exports = !global.ZeresPluginLibrary ? class {
         const spectrumRendererList =[];
         class SpectrumRenderer{
             constructor(obj,canvas,element){
-                const audioctx = new window.AudioContext;
-                this.destructor = () =>{
-                    this.alive = false;
-                    window.cancelAnimationFrame(this.anim);
-                    console.log("destructor called");
-                    audioctx.close();
-                    delete this;
-                };
-
-                obj['spectrumRendererDestructor'] = this.destructor;
                 spectrumRendererList.push(this);
+
                 this.obj = obj;
                 this.canvas = canvas.getContext('2d');
                 this.width = canvas.width;
                 this.height = canvas.height;
                 this.lineWidth = canvas.width/lines;
                 this.time = 0; // in ms
-                this.hasAudioData = false;
-                this.audioSourceNode = audioctx.createBufferSource();
-                this.analyserNode = audioctx.createAnalyser();
-                this.analyserNode.fftSize = 256;
-                const bufferLength = this.analyserNode.frequencyBinCount;
-                this.dataArray = new Uint8Array(bufferLength);
-
-                let startedAudioNode = false;
-                let stopAudioNode = () => {
-                    if(startedAudioNode){
-                        this.audioSourceNode.disconnect();
-                        this.audioSourceNode.stop(0);
-                        let newNode = audioctx.createBufferSource();
-                        newNode.buffer = this.audioSourceNode.buffer;
-                        this.audioSourceNode = newNode;
-                        this.audioSourceNode.connect(this.analyserNode);
-                        startedAudioNode = false;
-                    }
-                }
-                
-                let startAudioNode = () => {
-                    this.audioSourceNode.start(0, this.time/1000);
-                    startedAudioNode = true;
-                }
-                
-                
-                let initialised = false;
-                const get_audio_without_same_origin = () => {
-                    if(initialised)
-                        return;
-                    initialised = true;
-
-                    https.get(obj.props.src, (resp) => { 
-                        let data = new Uint8Array;
-                        resp.on('data', (chunk) => {
-                            let b = [data , chunk]
-                            data = Buffer.concat(b);
-                        });
-                        resp.on('end', () => {
-                            var arrayBuffer = new ArrayBuffer(data.length);
-                            var typedArray = new Uint8Array(arrayBuffer);
-                            for (var i = 0; i < data.length; ++i) {
-                                typedArray[i] = data[i];
-                            }
-                            audioctx.decodeAudioData(arrayBuffer, (buffer) =>{
-                                this.audioSourceNode.buffer = buffer;
-                                this.audioSourceNode.connect(this.analyserNode);
-                                this.hasAudioData = true;
-                                startAudioNode();
-                            });
-                        });
-                    });
-                }
-
-
-                this.levels = new Array(lines).fill(0);
-                this.timeDomain = new Uint8Array(this.analyserNode.fftSize)
                 this.alive = true;
                 this.anim;
                 this.pretime = 0;
-                let prePlaying = false;
-                let lastRender = 0;
-                this.draw = (timestamp) => {
-                    if(this.alive && this.canvas)
-                        this.anim = window.requestAnimationFrame(this.draw);
+                this.prePlaying = false;
+                this.lastRender = 0;
 
-                    let delta_time = timestamp - lastRender;
-                    lastRender = timestamp;
 
-                    this.canvas.clearRect(0, 0, this.width, this.height);
+                this.draw = this.draw.bind(this);
+                this.destructor = this.destructor.bind(this);
+                this.obj['spectrumRendererDestructor'] = this.destructor;
 
-                    if(this.obj.state.playing){
-                        this.time += delta_time;
-
-                        if(!prePlaying){
-                            get_audio_without_same_origin();
-                            if(this.hasAudioData)
-                                startAudioNode();
-                        }
-
-                        this.analyserNode.getByteFrequencyData(this.dataArray);
-
-                        let new_lvl;
-                        for(let i = 0; i < lines; i++){
-                            if(this.hasAudioData)
-                                new_lvl = (this.dataArray[i]/350) * (1 + i/75);
-                            else
-                                new_lvl = Math.sin((i + this.time/20.)/15.)/4. + 0.35;
-                            if(this.levels[i] < new_lvl)
-                                this.levels[i] = new_lvl;
-                        }
-
-                    }else if(prePlaying && this.audioSourceNode)     
-                        stopAudioNode()
-
-                    prePlaying = this.obj.state.playing;
-
-                    if(Math.floor(this.time/1000) != this.obj.state.currentTime){
-                        // This is unfortunatly only an int of seconds and will cause the time to be offset.
-                        this.time = this.obj.state.currentTime*1000;
-                        if(this.obj.state.playing){
-                            stopAudioNode();
-                            prePlaying = false;
-                        }
-                    }
-
-                    for(let i = 0; i < lines; i++){
-                        this.canvas.fillRect(i*this.lineWidth,
-                                             this.height-(this.levels[i]*this.height),
-                                             this.lineWidth+0.5,
-                                             this.levels[i]*this.height);
-                        if(this.levels[i] != 0){
-                            this.levels[i] -= fallSpeed;
-                            if(this.levels[i] < 0)
-                                this.levels[i] = 0;
-                        }
-                    }
-                    this.canvas.fillStyle = spectraColour;
-
-                    if(this.obj.state.playing && this.hasAudioData){
-                        // Oscillocope drawer from: https://github.com/mathiasvr/audio-oscilloscope
-                        this.analyserNode.getByteTimeDomainData(this.timeDomain);
-                        const step = this.width / this.timeDomain.length;
-                        this.canvas.beginPath();
-                        for (let i = 0; i < this.timeDomain.length; i += 2) {
-                            const percent = this.timeDomain[i] / 256;
-                            const x = (i * step);
-                            const y = (this.height * percent);
-                            this.canvas.lineTo(x, y);
-                        }
-                        this.canvas.stroke();
-                        this.canvas.strokeStyle = oscilloColour;
-                    }
-                };
+                this.initialiseAudioContext();
                 this.draw();
             }
+
+            initialiseAudioContext(){
+                this.audioctx = new window.AudioContext;
+                this.hasAudioData = false;
+                this.audioSourceNode = this.audioctx.createBufferSource();
+                this.analyserNode = this.audioctx.createAnalyser();
+                this.analyserNode.fftSize = 256;
+                this.dataArray = new Uint8Array(this.analyserNode.frequencyBinCount);
+                this.startedAudioNode = false;
+                this.initialised = false;
+                this.levels = new Array(lines).fill(0);
+                this.timeDomain = new Uint8Array(this.analyserNode.fftSize);
+            }
+
+            stopAudioNode(){
+                if(this.startedAudioNode){
+                    this.audioSourceNode.disconnect();
+                    this.audioSourceNode.stop(0);
+                    let newNode = this.audioctx.createBufferSource();
+                    newNode.buffer = this.audioSourceNode.buffer;
+                    this.audioSourceNode = newNode;
+                    this.audioSourceNode.connect(this.analyserNode);
+                    this.startedAudioNode = false;
+                }
+            }
+            
+            startAudioNode(){
+                this.audioSourceNode.start(0, this.time/1000);
+                this.startedAudioNode = true;
+            }
+            
+            get_audio_without_same_origin(){
+                // The audio file needs to be downloaded again becuase if it tries to access the 
+                // original one in the <audio> element there is a CORS error.
+                if(this.initialised)
+                    return;
+                this.initialised = true;
+
+                https.get(this.obj.props.src, (resp) => { 
+                    let data = new Uint8Array;
+                    resp.on('data', (chunk) => {
+                        let b = [data , chunk]
+                        data = Buffer.concat(b);
+                    });
+                    resp.on('end', () => {
+                        var arrayBuffer = new ArrayBuffer(data.length);
+                        var typedArray = new Uint8Array(arrayBuffer);
+                        for (var i = 0; i < data.length; ++i) {
+                            typedArray[i] = data[i];
+                        }
+                        this.audioctx.decodeAudioData(arrayBuffer, (buffer) =>{
+                            this.audioSourceNode.buffer = buffer;
+                            this.audioSourceNode.connect(this.analyserNode);
+                            this.hasAudioData = true;
+                            if(this.obj.state.playing)
+                                this.startAudioNode();
+                        });
+                    });
+                });
+            }
+            
+            draw(timestamp){
+                if(this.alive && this.canvas)
+                    this.anim = window.requestAnimationFrame(this.draw);
+
+                let delta_time = timestamp - this.lastRender;
+                this.lastRender = timestamp;
+
+                this.canvas.clearRect(0, 0, this.width, this.height);
+
+                if(this.obj.state.playing){
+                    this.time += delta_time;
+
+                    if(!this.prePlaying){
+                        this.get_audio_without_same_origin();
+                        if(this.hasAudioData)
+                            this.startAudioNode();
+                    }
+
+                    this.copySpectrumData();
+                }else if(this.prePlaying && this.audioSourceNode)     
+                    this.stopAudioNode();
+
+                this.prePlaying = this.obj.state.playing;
+
+                if(Math.floor(this.time/1000) != this.obj.state.currentTime){
+                    // This is unfortunatly only an int of seconds and will cause the time to be offset.
+                    this.time = this.obj.state.currentTime*1000;
+                    if(this.obj.state.playing){
+                        this.stopAudioNode();
+                        this.prePlaying = false;
+                    }
+                }
+
+                this.drawSpectrum();
+
+                if(this.obj.state.playing && this.hasAudioData){
+                    this.drawOscilloscope();
+                }
+            }
+
+            copySpectrumData(){
+                this.analyserNode.getByteFrequencyData(this.dataArray);
+
+                let new_lvl;
+                for(let i = 0; i < lines; i++){
+                    if(this.hasAudioData)
+                        new_lvl = (this.dataArray[i]/350) * (1 + i/75);
+                    else
+                        new_lvl = Math.sin((i + this.time/20.)/15.)/4. + 0.35;
+                    if(this.levels[i] < new_lvl)
+                        this.levels[i] = new_lvl;
+                }
+            }
+
+            drawSpectrum(){
+                for(let i = 0; i < lines; i++){
+                    this.canvas.fillRect(i*this.lineWidth,
+                                            this.height-(this.levels[i]*this.height),
+                                            this.lineWidth+0.5,
+                                            this.levels[i]*this.height);
+                    if(this.levels[i] != 0){
+                        this.levels[i] -= fallSpeed;
+                        if(this.levels[i] < 0)
+                            this.levels[i] = 0;
+                    }
+                }
+                this.canvas.fillStyle = spectraColour;
+            }
+
+            drawOscilloscope(){
+                // Oscillocope drawer from: https://github.com/mathiasvr/audio-oscilloscope
+                this.analyserNode.getByteTimeDomainData(this.timeDomain);
+                const step = this.width / this.timeDomain.length;
+                this.canvas.beginPath();
+                for (let i = 0; i < this.timeDomain.length; i += 2) {
+                    const percent = this.timeDomain[i] / 256;
+                    const x = (i * step);
+                    const y = (this.height * percent);
+                    this.canvas.lineTo(x, y);
+                }
+                this.canvas.stroke();
+                this.canvas.strokeStyle = oscilloColour;
+            }
+
+            destructor(){
+                this.alive = false;
+                window.cancelAnimationFrame(this.anim);
+                this.audioctx.close();
+                delete this;
+            };
         }
 
-        function parseFileSize(str){
+        const parseFileSize = (str) => {
             const spl = str.split(' ');
             let magnitude;
             switch(spl[1]){

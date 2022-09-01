@@ -4,7 +4,7 @@ Adds a spectrograph and oscilloscope visualizer to audio attachment players. Cur
 
 
 ### Preview 
-![Dark](img/dark.gif)
-![Light](img/light.gif)
-![Amethyst](img/amethyst.gif)
+![Dark](https://cdn.discordapp.com/attachments/860476583884881950/1014711335101141032/dark.gif)
+![Light](https://cdn.discordapp.com/attachments/860476583884881950/1014711334597828628/light.gif)
+![Amethyst](https://cdn.discordapp.com/attachments/860476583884881950/1014711335478624347/amethyst.gif)
 

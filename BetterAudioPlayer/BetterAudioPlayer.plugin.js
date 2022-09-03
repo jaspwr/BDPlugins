@@ -2,7 +2,7 @@
  * @name BetterAudioPlayer
  * @author jaspwr
  * @description Adds a spectrograph and oscilloscope visualizer to audio attachment players.
- * @version 1.0.0
+ * @version 1.0.1
  * @source https://raw.githubusercontent.com/jaspwr/BDPlugins/master/BetterAudioPlayer/BetterAudioPlayer.plugin.js
  */
 
@@ -12,11 +12,82 @@
         authors: [{
             name: "jaspwr"
         }],
-        version: "1.0.0",
+        version: "1.0.1",
         description: "Adds a spectrograph and oscilloscope visualizer to audio attachment players.",
         github_raw: "https://raw.githubusercontent.com/jaspwr/BDPlugins/master/BetterAudioPlayer/BetterAudioPlayer.plugin.js",
     },
-    defaultConfig: []
+    changelog: [
+        {
+            title : "v1.0.1",
+            items: ["Added settings.",
+                    "Fixed random crashing."],
+        }
+    ],
+    defaultConfig: [
+        {
+            type: "switch",
+            name: "Show spectrograph",
+            note: "Displays a spectrograph visualizer on audio players. Channel containing the audio attachment will need to be reloaded for changes to take effect.",
+            id: "showSpectrograph",
+            value: true
+        },
+        {
+            type: "switch",
+            name: "Show oscilloscope",
+            note: "Displays an oscilloscope visualizer on audio players. Channel containing the audio attachment will need to be reloaded for changes to take effect.",
+            id: "showOscilloscope",
+            value: true
+        },
+        {
+            type: "switch",
+            name: "Inherit colors from theme",
+            note: "The visualizers will use the colors from your theme. Channel containing the audio attachment will need to be reloaded for changes to take effect.",
+            id: "inheritColors",
+            value: true
+        },
+        {
+            type: "category",
+            name: "Manual color settings",
+            id: "manualColorSettings",
+            settings: [
+                {
+                    // Color picker doesn't work for some reason so I'm using a textbox for now
+                    type: "textbox",
+                    name: "Oscilliscope color",
+                    note: "If not inheriting colors from theme, this will be the color of the oscilloscope visualizer. Channel containing the audio attachment will need to be reloaded for changes to take effect.",
+                    id: "oscilloscopeColorCustom",
+                    value: "#FFFFFF",
+                },
+                {
+                    type: "textbox",
+                    name: "Spectrograph color",
+                    note: "If not inheriting colors from theme, this will be the color of the spectrograph visualizer. Channel containing the audio attachment will need to be reloaded for changes to take effect.",
+                    id: "spectrographColorCustom",
+                    value: "#738ADB",
+                }
+            ]
+        },
+        {
+            type: "slider",
+            name: "Specrograph segments",
+            note: "Number of segments to use for the spectrograph visualizer. Channel containing the audio attachment will need to be reloaded for changes to take effect.",
+            id: "spectrographSegments",
+            markers: [1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200],
+            keyboardStep: 1,
+            minValue: 1,
+            maxValue: 200,
+            handleSize: 10,
+            stickToMarkers: true,
+            value: 110
+        },
+        {
+            type: "switch",
+            name: "Bypass file size limit",
+            note: "Uses the visualizers on audio attachments larger than 12MB. Can cause serious lag and possibly crash client in some cases. Channel containing the audio attachment will need to be reloaded for changes to take effect.",
+            id: "bypassFileSizeLimit",
+            value: false
+        },
+    ]
 };
 
 module.exports = !global.ZeresPluginLibrary ? class {
@@ -43,16 +114,15 @@ module.exports = !global.ZeresPluginLibrary ? class {
         const MediaPlayer = WebpackModules.find(m => m?.default?.displayName === "MediaPlayer");
         const https = require('https');
 
-        const lines = 110;
-        let spectraColour = "#738ADB";
-        let oscilloColour = "#FFFFFF";
-        const fallSpeed = 0.12;
+        let lines = 110;
+        let fallSpeed = 0.12;
+        let spectraColour = getComputedStyle(document.documentElement).getPropertyValue('--brand-experiment');
+        let oscilloColour = getComputedStyle(document.documentElement).getPropertyValue('--text-normal');
+        let showOscilloscope = true;
+        let showSpectrograph = true;
 
-        const spectrumRendererList =[];
         class SpectrumRenderer{
             constructor(obj,canvas,element){
-                spectrumRendererList.push(this);
-
                 this.obj = obj;
                 this.canvas = canvas.getContext('2d');
                 this.width = canvas.width;
@@ -78,7 +148,7 @@ module.exports = !global.ZeresPluginLibrary ? class {
                 this.hasAudioData = false;
                 this.audioSourceNode = this.audioctx.createBufferSource();
                 this.analyserNode = this.audioctx.createAnalyser();
-                this.analyserNode.fftSize = 256;
+                this.analyserNode.fftSize = lines > 128 ? 512 : 256;
                 this.dataArray = new Uint8Array(this.analyserNode.frequencyBinCount);
                 this.startedAudioNode = false;
                 this.initialised = false;
@@ -166,20 +236,20 @@ module.exports = !global.ZeresPluginLibrary ? class {
                     }
                 }
 
-                this.drawSpectrum();
+                if(showSpectrograph)
+                    this.drawSpectrum();
 
-                if(this.obj.state.playing && this.hasAudioData){
+                if(showOscilloscope && this.obj.state.playing && this.hasAudioData)
                     this.drawOscilloscope();
-                }
             }
 
             copySpectrumData(){
                 this.analyserNode.getByteFrequencyData(this.dataArray);
-
                 let new_lvl;
+                let normal_line = lines > 128 ? 220 : 110;
                 for(let i = 0; i < lines; i++){
                     if(this.hasAudioData)
-                        new_lvl = (this.dataArray[i]/350) * (1 + i/75);
+                        new_lvl = (this.dataArray[Math.floor((i / lines) * normal_line)] / 350) * (1 + i / 75);
                     else
                         new_lvl = Math.sin((i + this.time/20.)/15.)/4. + 0.35;
                     if(this.levels[i] < new_lvl)
@@ -243,7 +313,14 @@ module.exports = !global.ZeresPluginLibrary ? class {
             return parseFloat(spl[0])*magnitude;
         }
 
+
+
         class _Plugin extends Plugin {
+            constructor() {
+                super();
+                this.getSettingsPanel = () => this.buildSettingsPanel().getElement();
+            }
+
             onStart() {
                 this.patch();
                 PluginUtilities.addStyle("audio_spectrum_style", `
@@ -266,21 +343,31 @@ module.exports = !global.ZeresPluginLibrary ? class {
             patch() {
                 const fileSizeLimit = 12e6; // 12 MB
                 Patcher.after(MediaPlayer.default.prototype, "componentDidMount", (obj, [props], ret) => {
-                    if(obj.props.type !== "AUDIO" || parseFileSize(obj.props.fileSize) > fileSizeLimit)
+                    if(obj.props.type !== "AUDIO" || (!this.settings.bypassFileSizeLimit && parseFileSize(obj.props.fileSize) > fileSizeLimit))
                         return;
 
-                    spectraColour = getComputedStyle(document.documentElement).getPropertyValue('--brand-experiment');
-                    oscilloColour = getComputedStyle(document.documentElement).getPropertyValue('--text-normal');
                     const element = ReactDOM.findDOMNode(obj);
                     element.childNodes[0].style.zIndex = "1";
                     element.childNodes[1].style.zIndex = "1";
                     element.childNodes[2].style.zIndex = "1";
                     const canvas = document.createElement("canvas");
+
                     canvas.className = "audio_spectrum";
                     element.appendChild(canvas);
                     const { width, height } = canvas.getBoundingClientRect();
                     canvas.width = width;
                     canvas.height = height;
+
+                    spectraColour = this.settings.inheritColors ?
+                        getComputedStyle(document.documentElement).getPropertyValue('--brand-experiment') 
+                        : this.settings.manualColorSettings.spectrographColorCustom;
+                    oscilloColour = this.settings.inheritColors ?
+                        getComputedStyle(document.documentElement).getPropertyValue('--text-normal') 
+                        : this.settings.manualColorSettings.oscilloscopeColorCustom;
+                    lines = this.settings.spectrographSegments;
+                    showSpectrograph = this.settings.showSpectrograph;
+                    showOscilloscope = this.settings.showOscilloscope;
+
                     new SpectrumRenderer(obj, canvas, element);
                 });
 

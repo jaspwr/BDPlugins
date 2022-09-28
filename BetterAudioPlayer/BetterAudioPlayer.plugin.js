@@ -12,19 +12,17 @@
         authors: [{
             name: "jaspwr"
         }],
-        version: "1.0.1",
+        version: "1.0.2",
         description: "Adds a spectrograph and oscilloscope visualizer to audio attachment players.",
         github_raw: "https://raw.githubusercontent.com/jaspwr/BDPlugins/master/BetterAudioPlayer/BetterAudioPlayer.plugin.js",
     },
-    changelog: [
-        {
-            title : "v1.0.1",
-            items: ["Added settings.",
-                    "Fixed random crashing."],
+    changelog: [{
+            type: "fixed",
+            title : "v1.0.2",
+            items: ["Fixed for new discord update."],
         }
     ],
-    defaultConfig: [
-        {
+    defaultConfig: [{
             type: "switch",
             name: "Show spectrograph",
             note: "Displays a spectrograph visualizer on audio players. Channel containing the audio attachment will need to be reloaded for changes to take effect.",
@@ -109,21 +107,24 @@ module.exports = !global.ZeresPluginLibrary ? class {
         stop() {}
     } :
     (([Plugin, Library]) => {
-        const { DiscordModules, WebpackModules, Patcher, PluginUtilities } = Library;
-        const { ReactDOM } = DiscordModules;
-        const MediaPlayer = WebpackModules.find(m => m?.default?.displayName === "MediaPlayer");
+        const { WebpackModules, PluginUtilities } = Library;
+
+        const audioPlayerClassName = WebpackModules.find(m => m?.wrapperAudio).wrapperAudio.split(' ')[0];
+        const canvasClass = "audio-vis";
+
         const https = require('https');
 
+        let canvasIdCounter = 0;
         let lines = 110;
         let fallSpeed = 0.12;
-        let spectraColour = getComputedStyle(document.documentElement).getPropertyValue('--brand-experiment');
-        let oscilloColour = getComputedStyle(document.documentElement).getPropertyValue('--text-normal');
+        let spectraColour = getComputedStyle(document.documentElement).getPropertyValue("--brand-experiment");
+        let oscilloColour = getComputedStyle(document.documentElement).getPropertyValue("--text-normal");
         let showOscilloscope = true;
         let showSpectrograph = true;
+        const spectrumRendererDestructors = {};
 
-        class SpectrumRenderer{
-            constructor(obj,canvas,element){
-                this.obj = obj;
+        class SpectrumRenderer {
+            constructor(canvas, element) {
                 this.canvas = canvas.getContext('2d');
                 this.width = canvas.width;
                 this.height = canvas.height;
@@ -134,16 +135,29 @@ module.exports = !global.ZeresPluginLibrary ? class {
                 this.pretime = 0;
                 this.prePlaying = false;
                 this.lastRender = 0;
+                this.element = element;
 
                 this.draw = this.draw.bind(this);
                 this.destructor = this.destructor.bind(this);
-                this.obj['spectrumRendererDestructor'] = this.destructor;
+                const canvasId = `audiovis${canvasIdCounter++}`;
+                canvas.id = canvasId;
+                spectrumRendererDestructors[canvasId] = this.destructor;
 
                 this.initialiseAudioContext();
                 this.draw();
             }
 
-            initialiseAudioContext(){
+            getIsPlaying() {
+                return this.element.childNodes[2].childNodes[0].getAttribute("aria-label") === "Pause";
+            }
+
+            getCurrentTime() {
+                const timeStr = this.element.childNodes[2].childNodes[1].childNodes[0].innerHTML;
+                const splTimeStr = timeStr.split(':');
+                return +splTimeStr[0] * 60 + +splTimeStr[1];
+            }
+
+            initialiseAudioContext() {
                 this.audioctx = new window.AudioContext;
                 this.hasAudioData = false;
                 this.audioSourceNode = this.audioctx.createBufferSource();
@@ -156,8 +170,8 @@ module.exports = !global.ZeresPluginLibrary ? class {
                 this.timeDomain = new Uint8Array(this.analyserNode.fftSize);
             }
 
-            stopAudioNode(){
-                if(this.startedAudioNode){
+            stopAudioNode() {
+                if(this.startedAudioNode) {
                     this.audioSourceNode.disconnect();
                     this.audioSourceNode.stop(0);
                     let newNode = this.audioctx.createBufferSource();
@@ -168,25 +182,25 @@ module.exports = !global.ZeresPluginLibrary ? class {
                 }
             }
             
-            startAudioNode(){
+            startAudioNode() {
                 this.audioSourceNode.start(0, this.time/1000);
                 this.startedAudioNode = true;
             }
             
-            get_audio_without_same_origin(){
+            getAudioWithoutSameOrigin() {
                 // The audio file needs to be downloaded again becuase if it tries to access the 
                 // original one in the <audio> element there is a CORS error.
                 if(this.initialised)
                     return;
                 this.initialised = true;
 
-                https.get(this.obj.props.src, (resp) => { 
+                https.get(this.element.childNodes[1].childNodes[0].src, (resp) => { 
                     let data = new Uint8Array;
-                    resp.on('data', (chunk) => {
+                    resp.on("data", (chunk) => {
                         let b = [data , chunk]
                         data = Buffer.concat(b);
                     });
-                    resp.on('end', () => {
+                    resp.on("end", () => {
                         var arrayBuffer = new ArrayBuffer(data.length);
                         var typedArray = new Uint8Array(arrayBuffer);
                         for (var i = 0; i < data.length; ++i) {
@@ -196,27 +210,28 @@ module.exports = !global.ZeresPluginLibrary ? class {
                             this.audioSourceNode.buffer = buffer;
                             this.audioSourceNode.connect(this.analyserNode);
                             this.hasAudioData = true;
-                            if(this.obj.state.playing)
+                            if(this.getIsPlaying())
                                 this.startAudioNode();
                         });
                     });
                 });
             }
             
-            draw(timestamp){
+            draw(timestamp) {
                 if(this.alive && this.canvas)
                     this.anim = window.requestAnimationFrame(this.draw);
 
+                const playing = this.getIsPlaying();
                 let delta_time = timestamp - this.lastRender;
                 this.lastRender = timestamp;
 
                 this.canvas.clearRect(0, 0, this.width, this.height);
 
-                if(this.obj.state.playing){
+                if(playing) {
                     this.time += delta_time;
 
-                    if(!this.prePlaying){
-                        this.get_audio_without_same_origin();
+                    if(!this.prePlaying) {
+                        this.getAudioWithoutSameOrigin();
                         if(this.hasAudioData)
                             this.startAudioNode();
                     }
@@ -225,12 +240,13 @@ module.exports = !global.ZeresPluginLibrary ? class {
                 }else if(this.prePlaying && this.audioSourceNode)     
                     this.stopAudioNode();
 
-                this.prePlaying = this.obj.state.playing;
+                this.prePlaying = playing;
 
-                if(Math.floor(this.time/1000) != this.obj.state.currentTime){
+                const currentTime = this.getCurrentTime();
+                if(Math.floor(this.time/1000) != currentTime) {
                     // This is unfortunatly only an int of seconds and will cause the time to be offset.
-                    this.time = this.obj.state.currentTime*1000;
-                    if(this.obj.state.playing){
+                    this.time = currentTime*1000;
+                    if(playing) {
                         this.stopAudioNode();
                         this.prePlaying = false;
                     }
@@ -238,16 +254,15 @@ module.exports = !global.ZeresPluginLibrary ? class {
 
                 if(showSpectrograph)
                     this.drawSpectrum();
-
-                if(showOscilloscope && this.obj.state.playing && this.hasAudioData)
+                if(showOscilloscope && playing && this.hasAudioData)
                     this.drawOscilloscope();
             }
 
-            copySpectrumData(){
+            copySpectrumData() {
                 this.analyserNode.getByteFrequencyData(this.dataArray);
                 let new_lvl;
                 let normal_line = lines > 128 ? 220 : 110;
-                for(let i = 0; i < lines; i++){
+                for(let i = 0; i < lines; i++) {
                     if(this.hasAudioData)
                         new_lvl = (this.dataArray[Math.floor((i / lines) * normal_line)] / 350) * (1 + i / 75);
                     else
@@ -257,13 +272,13 @@ module.exports = !global.ZeresPluginLibrary ? class {
                 }
             }
 
-            drawSpectrum(){
-                for(let i = 0; i < lines; i++){
+            drawSpectrum() {
+                for(let i = 0; i < lines; i++) {
                     this.canvas.fillRect(i*this.lineWidth,
                                             this.height-(this.levels[i]*this.height),
                                             this.lineWidth+0.5,
                                             this.levels[i]*this.height);
-                    if(this.levels[i] != 0){
+                    if(this.levels[i] != 0) {
                         this.levels[i] -= fallSpeed;
                         if(this.levels[i] < 0)
                             this.levels[i] = 0;
@@ -272,7 +287,7 @@ module.exports = !global.ZeresPluginLibrary ? class {
                 this.canvas.fillStyle = spectraColour;
             }
 
-            drawOscilloscope(){
+            drawOscilloscope() {
                 // Oscillocope drawer from: https://github.com/mathiasvr/audio-oscilloscope
                 this.analyserNode.getByteTimeDomainData(this.timeDomain);
                 const step = this.width / this.timeDomain.length;
@@ -287,7 +302,7 @@ module.exports = !global.ZeresPluginLibrary ? class {
                 this.canvas.strokeStyle = oscilloColour;
             }
 
-            destructor(){
+            destructor() {
                 this.alive = false;
                 window.cancelAnimationFrame(this.anim);
                 this.audioctx.close();
@@ -298,7 +313,7 @@ module.exports = !global.ZeresPluginLibrary ? class {
         const parseFileSize = (str) => {
             const spl = str.split(' ');
             let magnitude;
-            switch(spl[1]){
+            switch(spl[1]) {
             case "bytes":
                 magnitude = 1; break;
             case "KB":
@@ -310,10 +325,8 @@ module.exports = !global.ZeresPluginLibrary ? class {
             default:
                 magnitude = Infinity; break;
             }
-            return parseFloat(spl[0])*magnitude;
+            return parseFloat(spl[0]) * magnitude;
         }
-
-
 
         class _Plugin extends Plugin {
             constructor() {
@@ -322,9 +335,8 @@ module.exports = !global.ZeresPluginLibrary ? class {
             }
 
             onStart() {
-                this.patch();
                 PluginUtilities.addStyle("audio_spectrum_style", `
-                .audio_spectrum {
+                .${canvasClass} {
                     position: absolute;
                     top: 0px;
                     left: 0px;
@@ -336,47 +348,56 @@ module.exports = !global.ZeresPluginLibrary ? class {
                 }
                 `);
             }
-            onStop() {
-                Patcher.unpatchAll();
-                PluginUtilities.removeStyle("audio_spectrum_style");
-            }
-            patch() {
+
+            observer({addedNodes, removedNodes}) {
                 const fileSizeLimit = 12e6; // 12 MB
-                Patcher.after(MediaPlayer.default.prototype, "componentDidMount", (obj, [props], ret) => {
-                    if(obj.props.type !== "AUDIO" || (!this.settings.bypassFileSizeLimit && parseFileSize(obj.props.fileSize) > fileSizeLimit))
-                        return;
+                for(const node of addedNodes) {
+                    if(node.nodeType === Node.TEXT_NODE) continue;
+                    const elements = Array.from(node.getElementsByClassName(audioPlayerClassName));
+                    for (var i = 0; i < elements.length; i++) {
+                        const element = elements[i];
+                        const fileSize = parseFileSize(element.childNodes[0]?.childNodes[0]?.childNodes[1]?.innerHTML);
+                        if(!fileSize || (!this.settings.bypassFileSizeLimit && fileSize > fileSizeLimit)) continue;
 
-                    const element = ReactDOM.findDOMNode(obj);
-                    element.childNodes[0].style.zIndex = "1";
-                    element.childNodes[1].style.zIndex = "1";
-                    element.childNodes[2].style.zIndex = "1";
-                    const canvas = document.createElement("canvas");
+                        element.childNodes[0].style.zIndex = "1";
+                        element.childNodes[1].style.zIndex = "1";
+                        element.childNodes[2].style.zIndex = "1";
+                        const canvas = document.createElement("canvas");
+                        canvas.className = canvasClass;
+                        element.appendChild(canvas);
+                        const { width, height } = canvas.getBoundingClientRect();
+                        canvas.width = width;
+                        canvas.height = height;
 
-                    canvas.className = "audio_spectrum";
-                    element.appendChild(canvas);
-                    const { width, height } = canvas.getBoundingClientRect();
-                    canvas.width = width;
-                    canvas.height = height;
+                        spectraColour = this.settings.inheritColors ?
+                            getComputedStyle(document.documentElement).getPropertyValue('--brand-experiment') 
+                            : this.settings.manualColorSettings.spectrographColorCustom;
+                        oscilloColour = this.settings.inheritColors ?
+                            getComputedStyle(document.documentElement).getPropertyValue('--text-normal') 
+                            : this.settings.manualColorSettings.oscilloscopeColorCustom;
+                        lines = this.settings.spectrographSegments;
+                        showSpectrograph = this.settings.showSpectrograph;
+                        showOscilloscope = this.settings.showOscilloscope;
 
-                    spectraColour = this.settings.inheritColors ?
-                        getComputedStyle(document.documentElement).getPropertyValue('--brand-experiment') 
-                        : this.settings.manualColorSettings.spectrographColorCustom;
-                    oscilloColour = this.settings.inheritColors ?
-                        getComputedStyle(document.documentElement).getPropertyValue('--text-normal') 
-                        : this.settings.manualColorSettings.oscilloscopeColorCustom;
-                    lines = this.settings.spectrographSegments;
-                    showSpectrograph = this.settings.showSpectrograph;
-                    showOscilloscope = this.settings.showOscilloscope;
+                        new SpectrumRenderer(canvas, element);
+                    }
+                }
+                for(const node of removedNodes) {
+                    if(node.nodeType === Node.TEXT_NODE) continue;
+                    const elements = Array.from(node.getElementsByClassName(canvasClass));
+                    for(var i = 0; i < elements.length; i++) {
+                        const element = elements[i];
+                        if(element.id && spectrumRendererDestructors[element.id]) {
+                            spectrumRendererDestructors[element.id]();
+                            spectrumRendererDestructors[element.id] = undefined;
+                        }
+                    }
+                }
+            }
 
-                    new SpectrumRenderer(obj, canvas, element);
-                });
-
-                Patcher.after(MediaPlayer.default.prototype, "componentWillUnmount", (obj, [props], ret) => {
-                    if(obj.props.type !== "AUDIO")
-                        return;
-                    if(obj.spectrumRendererDestructor)
-                        obj.spectrumRendererDestructor();
-                });
+            onStop() {
+                PluginUtilities.removeStyle("audio_spectrum_style");
+                document.querySelectorAll(`.${canvasClass}`).forEach(e => e._unmount?.());
             }
         }
         return _Plugin;

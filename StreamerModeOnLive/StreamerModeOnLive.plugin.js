@@ -2,7 +2,7 @@
  * @name StreamerModeOnLive
  * @author jaspwr
  * @description Enables streamer mode when you go live on discord.
- * @version 0.0.1
+ * @version 0.0.2
  * @source https://raw.githubusercontent.com/jaspwr/BDPlugins/master/StreamerModeOnLive/StreamerModeOnLive.plugin.js
  */
 const config = {
@@ -11,10 +11,17 @@ const config = {
         authors: [{
             name: "jaspwr"
         }],
-        version: "0.0.1",
+        version: "0.0.2",
         description: "Enables streamer mode when you go live in a voice channel.",
         github_raw: "https://raw.githubusercontent.com/jaspwr/BDPlugins/master/StreamerModeOnLive/StreamerModeOnLive.plugin.js",
     },
+    changelog: [{
+        type: "fixed",
+        title: "v0.0.2",
+        items: [
+            "Fixed for new discord update."
+        ]
+    }],
     defaultConfig: []
 };
 
@@ -38,7 +45,8 @@ module.exports = !global.ZeresPluginLibrary ? class {
     } :
     (([Plugin, Library]) => {
         const { WebpackModules } = Library;
-        const Dispatcher = WebpackModules.getByProps('dispatch', 'subscribe');
+        const Dispatcher = WebpackModules.getByProps("dispatch", "register");
+
         class _Plugin extends Plugin {
             onStreamStarted() {
                 Dispatcher.dispatch({ type: "STREAMER_MODE_UPDATE", key: "enabled", value: true });

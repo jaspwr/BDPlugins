@@ -1,0 +1,32 @@
+{
+	"info": {
+		"name": "FixFailedEmbeds",
+		"version": "0.1.0",
+		"description": "Embeds files that would otherwise be unsupported.",
+		"authors": [
+			{
+				"name": "jaspwr"
+			}
+		],
+		"github_raw": "https://raw.githubusercontent.com/jaspwer/BDPlugins/main/FixFailedEmbeds/FixFailedEmbeds.plugin.js"
+	},
+	"build": {
+		"copy": true,
+		"zlibrary": true,
+		"production": false,
+		"alias": {
+			
+		},
+		"release": {
+			"source": true,
+			"readme": true
+		}
+	},
+	"dependencies": {
+		"ffmpeg": "^0.0.4",
+		"ffprobe": "^1.1.2",
+		"ffprobe-static": "^3.0.0",
+		"fluent-ffmpeg": "^2.1.2",
+		"machine-uuid": "^1.2.0"
+	}
+}

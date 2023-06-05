@@ -2,7 +2,7 @@
  * @name BetterAudioPlayer
  * @author jaspwr
  * @description Adds a spectrograph and oscilloscope visualizer to audio attachment players.
- * @version 1.0.2
+ * @version 1.0.3
  * @source https://raw.githubusercontent.com/jaspwr/BDPlugins/master/BetterAudioPlayer/BetterAudioPlayer.plugin.js
  */
 
@@ -107,7 +107,7 @@ module.exports = !global.ZeresPluginLibrary ? class {
         stop() {}
     } :
     (([Plugin, Library]) => {
-        const { WebpackModules, PluginUtilities } = Library;
+        const { WebpackModules, PluginUtilities, ReactTools } = Library;
 
         const audioPlayerClassName = WebpackModules.find(m => m?.wrapperAudio).wrapperAudio.split(' ')[0];
         const canvasClass = "audio-vis";
@@ -148,7 +148,7 @@ module.exports = !global.ZeresPluginLibrary ? class {
             }
 
             getIsPlaying() {
-                return this.element.childNodes[2].childNodes[0].getAttribute("aria-label") === "Pause";
+                return ReactTools.getReactInstance(this.element.childNodes[2].childNodes[0]).child?.key === "pause"
             }
 
             getCurrentTime() {

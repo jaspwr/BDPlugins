@@ -12,14 +12,14 @@
         authors: [{
             name: "jaspwr"
         }],
-        version: "1.0.2",
+        version: "1.0.3",
         description: "Adds a spectrograph and oscilloscope visualizer to audio attachment players.",
         github_raw: "https://raw.githubusercontent.com/jaspwr/BDPlugins/master/BetterAudioPlayer/BetterAudioPlayer.plugin.js",
     },
     changelog: [{
             type: "fixed",
-            title : "v1.0.2",
-            items: ["Fixed for new discord update."],
+            title : "v1.0.3",
+            items: ["Fixed not working in other languages."],
         }
     ],
     defaultConfig: [{
